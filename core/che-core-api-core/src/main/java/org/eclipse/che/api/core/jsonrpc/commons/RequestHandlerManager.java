@@ -25,6 +25,7 @@ import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import org.eclipse.che.api.core.websocket.commons.WebSocketMessageTransmitter;
+import org.eclipse.che.commons.annotation.Nullable;
 import org.slf4j.Logger;
 
 /**
@@ -50,18 +51,7 @@ public class RequestHandlerManager {
 
   private final Multimap<String, JsonRpcMethodInvokerFilter> filters = ArrayListMultimap.create();
 
-  private final Map<String, Category> methodToCategory = new ConcurrentHashMap<>();
-  private final Map<String, OneToOneHandler> oneToOneHandlers = new ConcurrentHashMap<>();
-  private final Map<String, OneToPromiseOneHandler> oneToPromiseOneHandlers =
-      new ConcurrentHashMap<>();
-  private final Map<String, OneToManyHandler> oneToManyHandlers = new ConcurrentHashMap<>();
-  private final Map<String, OneToNoneHandler> oneToNoneHandlers = new ConcurrentHashMap<>();
-  private final Map<String, ManyToOneHandler> manyToOneHandlers = new ConcurrentHashMap<>();
-  private final Map<String, ManyToManyHandler> manyToManyHandlers = new ConcurrentHashMap<>();
-  private final Map<String, ManyToNoneHandler> manyToNoneHandlers = new ConcurrentHashMap<>();
-  private final Map<String, NoneToOneHandler> noneToOneHandlers = new ConcurrentHashMap<>();
-  private final Map<String, NoneToManyHandler> noneToManyHandlers = new ConcurrentHashMap<>();
-  private final Map<String, NoneToNoneHandler> noneToNoneHandlers = new ConcurrentHashMap<>();
+  private final Map<String, Handler> handlers = new ConcurrentHashMap<>();
 
   private final WebSocketMessageTransmitter transmitter;
   private final JsonRpcComposer dtoComposer;
@@ -78,11 +68,10 @@ public class RequestHandlerManager {
   }
 
   public synchronized <P, R> void registerOneToOne(
-      String method, Class<P> pClass, Class<R> rClass, BiFunction<String, P, R> biFunction) {
+      String method, Class<P> pClass, Class<R> ignored, BiFunction<String, P, R> biFunction) {
     mustNotBeRegistered(method);
 
-    methodToCategory.put(method, Category.ONE_TO_ONE);
-    oneToOneHandlers.put(method, new OneToOneHandler<>(pClass, rClass, biFunction));
+    handlers.put(method, new OneToOneHandler<>(pClass, biFunction));
   }
 
   public synchronized void registerMethodInvokerFilter(
@@ -98,32 +87,28 @@ public class RequestHandlerManager {
       Class<R> rClass,
       BiFunction<String, P, JsonRpcPromise<R>> function) {
     mustNotBeRegistered(method);
-    methodToCategory.put(method, Category.ONE_TO_PROMISE_ONE);
-    oneToPromiseOneHandlers.put(method, new OneToPromiseOneHandler<>(pClass, rClass, function));
+    handlers.put(method, new OneToPromiseOneHandler<>(pClass, function));
   }
 
   public synchronized <P, R> void registerOneToMany(
       String method, Class<P> pClass, Class<R> rClass, BiFunction<String, P, List<R>> biFunction) {
     mustNotBeRegistered(method);
 
-    methodToCategory.put(method, Category.ONE_TO_MANY);
-    oneToManyHandlers.put(method, new OneToManyHandler<>(pClass, rClass, biFunction));
+    handlers.put(method, new OneToManyHandler<>(pClass, biFunction));
   }
 
   public synchronized <P> void registerOneToNone(
       String method, Class<P> pClass, BiConsumer<String, P> biConsumer) {
     mustNotBeRegistered(method);
 
-    methodToCategory.put(method, Category.ONE_TO_NONE);
-    oneToNoneHandlers.put(method, new OneToNoneHandler<>(pClass, biConsumer));
+    handlers.put(method, new OneToNoneHandler<>(pClass, biConsumer));
   }
 
   public synchronized <P, R> void registerManyToOne(
       String method, Class<P> pClass, Class<R> rClass, BiFunction<String, List<P>, R> biFunction) {
     mustNotBeRegistered(method);
 
-    methodToCategory.put(method, Category.MANY_TO_ONE);
-    manyToOneHandlers.put(method, new ManyToOneHandler<>(pClass, rClass, biFunction));
+    handlers.put(method, new ManyToOneHandler<>(pClass, biFunction));
   }
 
   public synchronized <P, R> void registerManyToMany(
@@ -133,135 +118,67 @@ public class RequestHandlerManager {
       BiFunction<String, List<P>, List<R>> function) {
     mustNotBeRegistered(method);
 
-    methodToCategory.put(method, Category.MANY_TO_MANY);
-    manyToManyHandlers.put(method, new ManyToManyHandler<>(pClass, rClass, function));
+    handlers.put(method, new ManyToManyHandler<>(pClass, function));
   }
 
   public synchronized <P> void registerManyToNone(
       String method, Class<P> pClass, BiConsumer<String, List<P>> biConsumer) {
     mustNotBeRegistered(method);
 
-    methodToCategory.put(method, Category.MANY_TO_NONE);
-    manyToNoneHandlers.put(method, new ManyToNoneHandler<>(pClass, biConsumer));
+    handlers.put(method, new ManyToNoneHandler<>(pClass, biConsumer));
   }
 
   public synchronized <R> void registerNoneToOne(
       String method, Class<R> rClass, Function<String, R> function) {
     mustNotBeRegistered(method);
 
-    methodToCategory.put(method, Category.NONE_TO_ONE);
-    noneToOneHandlers.put(method, new NoneToOneHandler<>(rClass, function));
+    handlers.put(method, new NoneToOneHandler<>(function));
   }
 
   public synchronized <R> void registerNoneToMany(
       String method, Class<R> rClass, Function<String, List<R>> function) {
     mustNotBeRegistered(method);
 
-    methodToCategory.put(method, Category.NONE_TO_MANY);
-    noneToManyHandlers.put(method, new NoneToManyHandler<>(rClass, function));
+    handlers.put(method, new NoneToManyHandler<>(function));
   }
 
   public synchronized void registerNoneToNone(String method, Consumer<String> consumer) {
     mustNotBeRegistered(method);
 
-    methodToCategory.put(method, Category.NONE_TO_NONE);
-    noneToNoneHandlers.put(method, new NoneToNoneHandler(consumer));
+    handlers.put(method, new NoneToNoneHandler(consumer));
   }
 
   public boolean isRegistered(String method) {
-    return methodToCategory.containsKey(method);
+    return handlers.containsKey(method);
   }
 
   public synchronized boolean deregister(String method) {
-    Category category = methodToCategory.remove(method);
-
-    if (category == null) {
-      return false;
-    }
-
-    switch (category) {
-      case ONE_TO_ONE:
-        oneToOneHandlers.remove(method);
-        break;
-      case ONE_TO_MANY:
-        oneToManyHandlers.remove(method);
-        break;
-      case ONE_TO_NONE:
-        oneToNoneHandlers.remove(method);
-        break;
-      case MANY_TO_ONE:
-        manyToOneHandlers.remove(method);
-        break;
-      case MANY_TO_MANY:
-        manyToManyHandlers.remove(method);
-        break;
-      case MANY_TO_NONE:
-        manyToNoneHandlers.remove(method);
-        break;
-      case NONE_TO_ONE:
-        noneToOneHandlers.remove(method);
-        break;
-      case NONE_TO_MANY:
-        noneToManyHandlers.remove(method);
-        break;
-      case NONE_TO_NONE:
-        noneToNoneHandlers.remove(method);
-        break;
-      case ONE_TO_PROMISE_ONE:
-        oneToPromiseOneHandlers.remove(method);
-        break;
-    }
-
-    return true;
+    return handlers.remove(method) == null;
   }
 
-  public <P, R> void handle(
+  public void handle(
       String endpointId, String requestId, String method, JsonRpcParams params) {
     mustBeRegistered(method);
 
-    switch (methodToCategory.get(method)) {
-      case ONE_TO_ONE:
-        oneToOneHandlers.get(method).handle(endpointId, requestId, method, params);
-        break;
-      case ONE_TO_MANY:
-        oneToManyHandlers.get(method).handle(endpointId, requestId, method, params);
-        break;
-      case MANY_TO_ONE:
-        manyToOneHandlers.get(method).handle(endpointId, requestId, method, params);
-        break;
-      case MANY_TO_MANY:
-        manyToManyHandlers.get(method).handle(endpointId, requestId, method, params);
-        break;
-      case NONE_TO_ONE:
-        noneToOneHandlers.get(method).handle(endpointId, requestId, method, params);
-        break;
-      case NONE_TO_MANY:
-        noneToManyHandlers.get(method).handle(endpointId, requestId, method, params);
-        break;
-      case ONE_TO_PROMISE_ONE:
-        oneToPromiseOneHandlers.get(method).handle(endpointId, requestId, method, params);
-        break;
-      default:
-        LOGGER.error("Something went wrong trying to find out handler category");
+    Handler handler = handlers.get(method);
+    if (handler == null) {
+      LOGGER.error("Something went wrong trying to find out handler category");
+      return;
     }
+
+    handler.handle(endpointId, requestId, method, params);
   }
 
   public void handle(String endpointId, String method, JsonRpcParams params) {
     mustBeRegistered(method);
 
-    switch (methodToCategory.get(method)) {
-      case ONE_TO_NONE:
-        oneToNoneHandlers.get(method).handle(endpointId, method, params);
-        break;
-      case MANY_TO_NONE:
-        manyToNoneHandlers.get(method).handle(endpointId, method, params);
-        break;
-      case NONE_TO_NONE:
-        noneToNoneHandlers.get(method).handle(method, endpointId);
-        break;
-      default:
-        LOGGER.error("Something went wrong trying to find out handler category");
+    Handler handler = handlers.get(method);
+    if (handler == null) {
+      LOGGER.error("Something went wrong trying to find out handler category");
+      return;
     }
+
+    handler.handle(endpointId, null, method, params);
   }
 
   private void mustBeRegistered(String method) {
@@ -319,78 +236,64 @@ public class RequestHandlerManager {
         });
   }
 
-  public enum Category {
-    ONE_TO_ONE,
-    ONE_TO_MANY,
-    ONE_TO_NONE,
-    MANY_TO_ONE,
-    MANY_TO_MANY,
-    MANY_TO_NONE,
-    NONE_TO_ONE,
-    NONE_TO_MANY,
-    NONE_TO_NONE,
-    ONE_TO_PROMISE_ONE
+  private interface Handler {
+    void handle(String endpointId, @Nullable String requestId, String method, JsonRpcParams params);
   }
 
-  private class OneToOneHandler<P, R> {
+  private class OneToOneHandler<P, R> implements Handler {
     private final Class<P> pClass;
-    private final Class<R> rClass;
     private final BiFunction<String, P, R> biFunction;
 
-    private OneToOneHandler(Class<P> pClass, Class<R> rClass, BiFunction<String, P, R> biFunction) {
+    private OneToOneHandler(Class<P> pClass, BiFunction<String, P, R> biFunction) {
       this.pClass = pClass;
-      this.rClass = rClass;
       this.biFunction = biFunction;
     }
 
-    private void handle(String endpointId, String requestId, String method, JsonRpcParams params) {
-      P param = composeOne(params, pClass);
-      for (JsonRpcMethodInvokerFilter filter : filters.get(method)) {
-        filter.accept(method, param);
-      }
-      transmitOne(endpointId, requestId, biFunction.apply(endpointId, param));
+    @Override
+    public void handle(String endpointId, String requestId, String method, JsonRpcParams params) {
+      P dto = composeOne(params, pClass);
+      filter(method, dto);
+      transmitOne(endpointId, requestId, biFunction.apply(endpointId, dto));
     }
   }
 
-  private class OneToPromiseOneHandler<P, R> {
+  private class OneToPromiseOneHandler<P, R> implements Handler {
     private final Class<P> pClass;
-    private final Class<R> rClass;
     private BiFunction<String, P, JsonRpcPromise<R>> function;
 
     private OneToPromiseOneHandler(
-        Class<P> pClass, Class<R> rClass, BiFunction<String, P, JsonRpcPromise<R>> function) {
+        Class<P> pClass, BiFunction<String, P, JsonRpcPromise<R>> function) {
       this.pClass = pClass;
-      this.rClass = rClass;
       this.function = function;
     }
 
-    private void handle(String endpointId, String requestId, String method, JsonRpcParams params) {
-      P param = dtoComposer.composeOne(params, pClass);
-      filter(method, param);
-      transmitPromiseOne(endpointId, requestId, function.apply(endpointId, param));
+    @Override
+    public void handle(String endpointId, String requestId, String method, JsonRpcParams params) {
+      P dto = composeOne(params, pClass);
+      filter(method, dto);
+      transmitOne(endpointId, requestId, function.apply(endpointId, dto));
     }
   }
 
-  private class OneToManyHandler<P, R> {
+  private class OneToManyHandler<P, R> implements Handler {
     private final Class<P> pClass;
-    private final Class<R> rClass;
     private final BiFunction<String, P, List<R>> biFunction;
 
     private OneToManyHandler(
-        Class<P> pClass, Class<R> rClass, BiFunction<String, P, List<R>> biFunction) {
+        Class<P> pClass, BiFunction<String, P, List<R>> biFunction) {
       this.pClass = pClass;
-      this.rClass = rClass;
       this.biFunction = biFunction;
     }
 
-    private void handle(String endpointId, String requestId, String method, JsonRpcParams params) {
-      P param = dtoComposer.composeOne(params, pClass);
-      filter(method, param);
-      transmitMany(endpointId, requestId, biFunction.apply(endpointId, param));
+    @Override
+    public void handle(String endpointId, String requestId, String method, JsonRpcParams params) {
+      P dto = dtoComposer.composeOne(params, pClass);
+      filter(method, dto);
+      transmitMany(endpointId, requestId, biFunction.apply(endpointId, dto));
     }
   }
 
-  private class OneToNoneHandler<P> {
+  private class OneToNoneHandler<P> implements Handler {
     private final Class<P> pClass;
     private final BiConsumer<String, P> biConsumer;
 
@@ -399,54 +302,51 @@ public class RequestHandlerManager {
       this.biConsumer = biConsumer;
     }
 
-    private void handle(String endpointId, String method, JsonRpcParams params) {
+    @Override
+    public void handle(String endpointId, String requestId, String method, JsonRpcParams params) {
       P param = composeOne(params, pClass);
       filter(method, param);
       biConsumer.accept(endpointId, param);
     }
   }
 
-  private class ManyToOneHandler<P, R> {
+  private class ManyToOneHandler<P, R> implements Handler {
     private final Class<P> pClass;
-    private final Class<R> rClass;
     private final BiFunction<String, List<P>, R> biFunction;
 
     private ManyToOneHandler(
-        Class<P> pClass, Class<R> rClass, BiFunction<String, List<P>, R> biFunction) {
+        Class<P> pClass, BiFunction<String, List<P>, R> biFunction) {
       this.pClass = pClass;
-      this.rClass = rClass;
       this.biFunction = biFunction;
     }
 
-    private void handle(
-        String endpointId, String requestId, String method, JsonRpcParams jsonParam) {
-      List<P> param = dtoComposer.composeMany(jsonParam, pClass);
-      filter(method, param);
-      transmitOne(endpointId, requestId, biFunction.apply(endpointId, param));
+    @Override
+    public void handle(String endpointId, String requestId, String method, JsonRpcParams params) {
+      List<P> dto = dtoComposer.composeMany(params, pClass);
+      filter(method, dto);
+      transmitOne(endpointId, requestId, biFunction.apply(endpointId, dto));
     }
   }
 
-  private class ManyToManyHandler<P, R> {
+  private class ManyToManyHandler<P, R> implements Handler {
     private final Class<P> pClass;
-    private final Class<R> rClass;
     private final BiFunction<String, List<P>, List<R>> biFunction;
 
     private ManyToManyHandler(
-        Class<P> pClass, Class<R> rClass, BiFunction<String, List<P>, List<R>> biFunction) {
+        Class<P> pClass, BiFunction<String, List<P>, List<R>> biFunction) {
       this.pClass = pClass;
-      this.rClass = rClass;
       this.biFunction = biFunction;
     }
 
-    private void handle(
-        String endpointId, String requestId, String method, JsonRpcParams jsonParams) {
-      List<P> params = dtoComposer.composeMany(jsonParams, pClass);
-      filter(method, params);
-      transmitMany(endpointId, requestId, biFunction.apply(endpointId, params));
+    @Override
+    public void handle(String endpointId, String requestId, String method, JsonRpcParams params) {
+      List<P> dto = dtoComposer.composeMany(params, pClass);
+      filter(method, dto);
+      transmitMany(endpointId, requestId, biFunction.apply(endpointId, dto));
     }
   }
 
-  private class ManyToNoneHandler<P> {
+  private class ManyToNoneHandler<P> implements Handler {
     private final Class<P> pClass;
     private final BiConsumer<String, List<P>> biConsumer;
 
@@ -455,55 +355,51 @@ public class RequestHandlerManager {
       this.biConsumer = biConsumer;
     }
 
-    private void handle(String endpointId, String method, JsonRpcParams params) {
+    @Override
+    public void handle(String endpointId, String requestId, String method, JsonRpcParams params) {
       List<P> listDto = composeMany(params, pClass);
       filter(method, listDto);
       biConsumer.accept(endpointId, listDto);
     }
-
-    public List<P> compose(JsonRpcParams params) {
-      return dtoComposer.composeMany(params, pClass);
-    }
   }
 
-  private class NoneToOneHandler<R> {
-    private final Class<R> rClass;
+  private class NoneToOneHandler<R> implements Handler {
     private final Function<String, R> function;
 
-    private NoneToOneHandler(Class<R> rClass, Function<String, R> function) {
-      this.rClass = rClass;
+    private NoneToOneHandler(Function<String, R> function) {
       this.function = function;
     }
 
-    private void handle(String endpointId, String requestId, String method, JsonRpcParams params) {
+    @Override
+    public void handle(String endpointId, String requestId, String method, JsonRpcParams params) {
       filter(method);
       transmitOne(endpointId, requestId, function.apply(endpointId));
     }
   }
 
-  private class NoneToManyHandler<R> {
-    private final Class<R> rClass;
+  private class NoneToManyHandler<R> implements Handler {
     private final Function<String, List<R>> function;
 
-    private NoneToManyHandler(Class<R> rClass, Function<String, List<R>> function) {
-      this.rClass = rClass;
+    private NoneToManyHandler(Function<String, List<R>> function) {
       this.function = function;
     }
 
-    private void handle(String endpointId, String requestId, String method, JsonRpcParams params) {
+    @Override
+    public void handle(String endpointId, String requestId, String method, JsonRpcParams params) {
       filter(method);
       transmitMany(endpointId, requestId, function.apply(endpointId));
     }
   }
 
-  private class NoneToNoneHandler {
+  private class NoneToNoneHandler implements Handler {
     private final Consumer<String> consumer;
 
     private NoneToNoneHandler(Consumer<String> consumer) {
       this.consumer = consumer;
     }
 
-    private void handle(String method, String endpointId) {
+    @Override
+    public void handle(String endpointId, String requestId, String method, JsonRpcParams params) {
       filter(method);
       consumer.accept(endpointId);
     }
