@@ -22,6 +22,15 @@ public class PluginMeta {
   private String version = null;
   private String title = null;
   private String description = null;
+  private String category = null;
+  private String publisher = null;
+  private String repository = null;
+  private String tags = null;
+  private String mediaImage = null;
+  private String mediaVideo = null;
+  private String firstPublicationDate = null;
+  private String latestUpdateDate = null;
+  private String preview = null;
   private String icon = null;
   private String url = null;
   private Map<String, String> attributes = new HashMap<>();
@@ -108,5 +117,86 @@ public class PluginMeta {
   public PluginMeta attributes(Map<String, String> attributes) {
     this.attributes = attributes;
     return this;
+  }
+
+  public PluginMeta category(String category) {
+    this.category = category;
+    return this;
+  }
+
+  public String getCategory() {
+    return category;
+  }
+
+  public PluginMeta publisher(String publisher) {
+    this.publisher = publisher;
+    return this;
+  }
+
+  public String getPublisher() {
+    return publisher;
+  }
+
+  public PluginMeta repository(String repository) {
+    this.repository = repository;
+    return this;
+  }
+
+  public String getRepository() {
+    return repository;
+  }
+
+  public PluginMeta tags(String tags) {
+    this.tags = tags;
+    return this;
+  }
+
+  public String getTags() {
+    return tags;
+  }
+
+  public PluginMeta mediaImage(String mediaImage) {
+    this.mediaImage = mediaImage;
+    return this;
+  }
+
+  public String getMediaImage() {
+    return mediaImage;
+  }
+
+  public PluginMeta mediaVideo(String mediaVideo) {
+    this.mediaVideo = mediaVideo;
+    return this;
+  }
+
+  public String getediaVideo() {
+    return mediaVideo;
+  }
+
+  public PluginMeta preview(String preview) {
+    this.preview = preview;
+    return this;
+  }
+
+  public String getPreview() {
+    return preview;
+  }
+
+  public PluginMeta firstPublicationDate(String firstPublicationDate) {
+    this.firstPublicationDate = firstPublicationDate;
+    return this;
+  }
+
+  public String getFirstPublicationDate() {
+    return firstPublicationDate;
+  }
+
+  public PluginMeta latestUpdateDate(String latestUpdateDate) {
+    this.latestUpdateDate = latestUpdateDate;
+    return this;
+  }
+
+  public String getLatestUpdateDate() {
+    return latestUpdateDate;
   }
 }
