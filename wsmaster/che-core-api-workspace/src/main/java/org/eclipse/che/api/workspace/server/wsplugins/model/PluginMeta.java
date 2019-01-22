@@ -169,7 +169,7 @@ public class PluginMeta {
     return this;
   }
 
-  public String getediaVideo() {
+  public String getMediaVideo() {
     return mediaVideo;
   }
 
