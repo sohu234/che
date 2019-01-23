@@ -12,6 +12,7 @@
 package org.eclipse.che.api.workspace.server.wsplugins.model;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /** @author Oleksandr Garagatyi */
@@ -25,7 +26,7 @@ public class PluginMeta {
   private String category = null;
   private String publisher = null;
   private String repository = null;
-  private String tags = null;
+  private List<String> tags = null;
   private String mediaImage = null;
   private String mediaVideo = null;
   private String firstPublicationDate = null;
@@ -146,12 +147,12 @@ public class PluginMeta {
     return repository;
   }
 
-  public PluginMeta tags(String tags) {
+  public PluginMeta tags(List<String> tags) {
     this.tags = tags;
     return this;
   }
 
-  public String getTags() {
+  public List<String> getTags() {
     return tags;
   }
 
