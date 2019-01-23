@@ -11,6 +11,7 @@
  */
 package org.eclipse.che.api.workspace.server.wsplugins.model;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -153,6 +154,9 @@ public class PluginMeta {
   }
 
   public List<String> getTags() {
+    if (tags == null) {
+      return new ArrayList<>();
+    }
     return tags;
   }
 
