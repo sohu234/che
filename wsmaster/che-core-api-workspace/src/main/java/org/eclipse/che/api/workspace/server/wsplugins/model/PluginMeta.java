@@ -27,7 +27,7 @@ public class PluginMeta {
   private String category = null;
   private String publisher = null;
   private String repository = null;
-  private List<String> tags = null;
+  private List<String> tags = new ArrayList<>();
   private String mediaImage = null;
   private String mediaVideo = null;
   private String firstPublicationDate = null;
@@ -155,7 +155,7 @@ public class PluginMeta {
 
   public List<String> getTags() {
     if (tags == null) {
-      return new ArrayList<>();
+      tags = new ArrayList<>();
     }
     return tags;
   }
