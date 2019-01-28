@@ -27,7 +27,7 @@ public class PluginMeta {
   private String category = null;
   private String publisher = null;
   private String repository = null;
-  private List<String> tags = new ArrayList<>();
+  private List<String> tags = null;
   private String mediaImage = null;
   private String mediaVideo = null;
   private String firstPublicationDate = null;
@@ -35,7 +35,7 @@ public class PluginMeta {
   private String preview = null;
   private String icon = null;
   private String url = null;
-  private Map<String, String> attributes = new HashMap<>();
+  private Map<String, String> attributes = null;
 
   public PluginMeta name(String name) {
     this.name = name;
