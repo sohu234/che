@@ -30,7 +30,7 @@ public class ServerSideRequestProcessor implements RequestProcessor {
 
   @Override
   public void process(String endpointId, Runnable runnable) {
-    Configuration configuration = requestProcessorConfigurator.getOrDefault(endpointId);
+    Configuration configuration = requestProcessorConfigurator.get(endpointId);
     ExecutorService executionService = configuration.getExecutionService();
     executionService.execute(ThreadLocalPropagateContext.wrap(runnable));
   }

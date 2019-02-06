@@ -15,34 +15,20 @@ import java.util.concurrent.ExecutorService;
 
 /** Request processor configurator */
 public interface RequestProcessorConfigurator {
-  /**
-   * Configure processing for specified endpoint
-   *
-   * @param endpointId endpointId
-   * @param configuration configuration
-   */
-  void put(String endpointId, Configuration configuration);
 
   /**
-   * Get request processor configuration for specified endpoint, returns null if no corresponding
-   * configuration is found.
+   * Get request processor configuration for specified endpoint.
    *
    * @param endpointId endpoint id
    * @return
    */
-  Configuration getOrNull(String endpointId);
-
-  /**
-   * Get request processor configuration for specified endpoint, returns default value if no
-   * corresponding configuration is found.
-   *
-   * @param endpointId endpoint id
-   * @return
-   */
-  Configuration getOrDefault(String endpointId);
+  Configuration get(String endpointId);
 
   /** Request processor configuration */
   interface Configuration {
+
+    String getEndpointId();
+
     ExecutorService getExecutionService();
   }
 }

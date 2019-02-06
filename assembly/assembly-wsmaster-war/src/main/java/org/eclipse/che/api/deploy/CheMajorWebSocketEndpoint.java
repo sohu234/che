@@ -15,12 +15,14 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.slf4j.LoggerFactory.getLogger;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
-import javax.annotation.PostConstruct;
 import javax.inject.Inject;
 import javax.inject.Named;
+import javax.inject.Provider;
+import javax.inject.Singleton;
 import javax.websocket.server.ServerEndpoint;
 import org.eclipse.che.api.core.jsonrpc.commons.RequestProcessorConfigurator;
 import org.eclipse.che.api.core.websocket.commons.WebSocketMessageReceiver;
@@ -40,42 +42,69 @@ import org.slf4j.Logger;
 public class CheMajorWebSocketEndpoint extends BasicWebSocketEndpoint {
   private static final Logger LOG = getLogger(CheMajorWebSocketEndpoint.class);
 
-  private final int maxPoolSize;
-  private final RequestProcessorConfigurator requestProcessorConfigurator;
-
-  private ThreadPoolExecutor executor;
+  public static final String ENDPOINT_ID = "master-websocket-major-endpoint";
 
   @Inject
   public CheMajorWebSocketEndpoint(
       WebSocketSessionRegistry registry,
       MessagesReSender reSender,
       WebSocketMessageReceiver receiver,
-      WebsocketIdService websocketIdService,
-      RequestProcessorConfigurator requestProcessorConfigurator,
-      @Named("che.core.jsonrpc.processor_max_pool_size") int maxPoolSize) {
+      WebsocketIdService websocketIdService) {
     super(registry, reSender, receiver, websocketIdService);
-    this.maxPoolSize = maxPoolSize;
-    this.requestProcessorConfigurator = requestProcessorConfigurator;
   }
 
   @Override
   protected String getEndpointId() {
-    return "master-websocket-major-endpoint";
+    return ENDPOINT_ID;
   }
 
-  @PostConstruct
-  private void postConstruct() {
-    ThreadFactory factory =
-        new ThreadFactoryBuilder()
-            .setUncaughtExceptionHandler(LoggingUncaughtExceptionHandler.getInstance())
-            .setNameFormat(CheMajorWebSocketEndpoint.class.getSimpleName() + "-%d")
-            .setDaemon(true)
-            .build();
+  public static class CheMajorWebSocketEndpointConfiguration
+      implements RequestProcessorConfigurator.Configuration {
 
-    executor =
-        new ThreadPoolExecutor(0, maxPoolSize, 60L, SECONDS, new SynchronousQueue<>(), factory);
-    executor.setRejectedExecutionHandler(
-        (r, __) -> LOG.error("Message {} rejected for execution", r));
-    requestProcessorConfigurator.put(getEndpointId(), () -> executor);
+    private final ExecutorService executor;
+
+    @Inject
+    public CheMajorWebSocketEndpointConfiguration(
+        @Named("che.core.jsonrpc.major_executor") ExecutorService executor) {
+      this.executor = executor;
+    }
+
+    @Override
+    public String getEndpointId() {
+      return ENDPOINT_ID;
+    }
+
+    @Override
+    public ExecutorService getExecutionService() {
+      return executor;
+    }
+  }
+
+  @Singleton
+  public static class CheMajorWebSocketEndpointExecutorServiceProvider
+      implements Provider<ExecutorService> {
+
+    private final ThreadPoolExecutor executor;
+
+    @Inject
+    public CheMajorWebSocketEndpointExecutorServiceProvider(
+        @Named("che.core.jsonrpc.processor_max_pool_size") int maxPoolSize) {
+      ThreadFactory factory =
+          new ThreadFactoryBuilder()
+              .setUncaughtExceptionHandler(LoggingUncaughtExceptionHandler.getInstance())
+              .setNameFormat(CheMajorWebSocketEndpoint.class.getSimpleName() + "-%d")
+              .setDaemon(true)
+              .build();
+
+      executor =
+          new ThreadPoolExecutor(0, maxPoolSize, 60L, SECONDS, new SynchronousQueue<>(), factory);
+      executor.setRejectedExecutionHandler(
+          (r, __) -> LOG.error("Message {} rejected for execution", r));
+    }
+
+    @Override
+    public ExecutorService get() {
+      return executor;
+    }
   }
 }
