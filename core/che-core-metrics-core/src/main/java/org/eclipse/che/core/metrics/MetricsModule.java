@@ -13,9 +13,16 @@ package org.eclipse.che.core.metrics;
 
 import com.google.common.annotations.Beta;
 import com.google.inject.AbstractModule;
+import com.google.inject.Key;
+import com.google.inject.Provider;
+import com.google.inject.matcher.Matchers;
 import com.google.inject.multibindings.Multibinder;
+import com.google.inject.name.Named;
+import com.google.inject.spi.ProvisionListener;
+import io.micrometer.core.instrument.Tags;
 import io.micrometer.core.instrument.binder.MeterBinder;
 import io.micrometer.core.instrument.binder.jvm.ClassLoaderMetrics;
+import io.micrometer.core.instrument.binder.jvm.ExecutorServiceMetrics;
 import io.micrometer.core.instrument.binder.jvm.JvmGcMetrics;
 import io.micrometer.core.instrument.binder.jvm.JvmMemoryMetrics;
 import io.micrometer.core.instrument.binder.jvm.JvmThreadMetrics;
@@ -25,6 +32,10 @@ import io.micrometer.core.instrument.binder.system.ProcessorMetrics;
 import io.micrometer.core.instrument.binder.system.UptimeMetrics;
 import io.micrometer.prometheus.PrometheusMeterRegistry;
 import io.prometheus.client.CollectorRegistry;
+import java.lang.annotation.Annotation;
+import java.util.concurrent.ExecutorService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Beta
 public class MetricsModule extends AbstractModule {
@@ -49,5 +60,39 @@ public class MetricsModule extends AbstractModule {
     meterMultibinder.addBinding().to(UptimeMetrics.class);
     meterMultibinder.addBinding().to(FileStoresMeterBinder.class);
     meterMultibinder.addBinding().to(ApiResponseCounter.class);
+
+    bindListener(
+        Matchers.any(), new MyProvisionListener(getProvider(PrometheusMeterRegistry.class)));
+  }
+
+  private static class MyProvisionListener implements ProvisionListener {
+
+    private final Logger LOG = LoggerFactory.getLogger(ProvisionListener.class);
+    Provider<PrometheusMeterRegistry> meterRegistryProvider;
+
+    public MyProvisionListener(Provider<PrometheusMeterRegistry> meterRegistryProvider) {
+      this.meterRegistryProvider = meterRegistryProvider;
+    }
+
+    @Override
+    public <T> void onProvision(ProvisionInvocation<T> provision) {
+      T obj = provision.provision();
+      //
+      if (obj != null && ExecutorService.class.isAssignableFrom(obj.getClass())) {
+        Key<T> key = provision.getBinding().getKey();
+        Annotation an = key.getAnnotation();
+        if (an != null) {
+          String name = null;
+          if (Named.class.isAssignableFrom(an.annotationType())) {
+            name = ((Named) an).value();
+          } else if (javax.inject.Named.class.isAssignableFrom(an.annotationType())) {
+            name = ((javax.inject.Named) an).value();
+          }
+          LOG.info("Binding metrics for {} with name {} ", obj, name);
+          ExecutorServiceMetrics.monitor(
+              meterRegistryProvider.get(), (ExecutorService) obj, name, Tags.empty());
+        }
+      }
+    }
   }
 }
